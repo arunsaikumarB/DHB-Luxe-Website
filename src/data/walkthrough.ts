@@ -19,7 +19,7 @@ export type WalkthroughSection = {
 export const walkthroughSections: WalkthroughSection[] = [
   {
     id: 'elevations',
-    src: '/videos/01-elevation.mp4?v=smooth3',
+    src: '/videos/01-elevation.mp4?v=smooth4',
     label: '01 — Elevations',
     title: 'Elevations',
     headline: 'Building Dream Homes Across New Jersey',
@@ -31,7 +31,7 @@ export const walkthroughSections: WalkthroughSection[] = [
   },
   {
     id: 'living-rooms',
-    src: '/videos/02-living-room.mp4?v=smooth3',
+    src: '/videos/02-living-room.mp4?v=smooth4',
     label: '02 — Living Rooms',
     title: 'Living Rooms',
     description:
@@ -41,7 +41,7 @@ export const walkthroughSections: WalkthroughSection[] = [
   },
   {
     id: 'bedrooms',
-    src: '/videos/03-bedroom.mp4?v=smooth3',
+    src: '/videos/03-bedroom.mp4?v=smooth4',
     label: '03 — Bedrooms',
     title: 'Bedrooms',
     description:
@@ -51,7 +51,7 @@ export const walkthroughSections: WalkthroughSection[] = [
   },
   {
     id: 'bathrooms',
-    src: '/videos/04-bathroom.mp4?v=smooth3',
+    src: '/videos/04-bathroom.mp4?v=smooth4',
     label: '04 — Bathrooms',
     title: 'Bathrooms',
     description:
@@ -61,7 +61,7 @@ export const walkthroughSections: WalkthroughSection[] = [
   },
   {
     id: 'kitchen',
-    src: '/videos/05-kitchen.mp4?v=smooth3',
+    src: '/videos/05-kitchen.mp4?v=smooth4',
     label: '05 — Kitchen & Wet Bars',
     title: 'Kitchen & Wet Bars',
     headline: 'Culinary Architecture',
@@ -78,7 +78,7 @@ export const walkthroughSections: WalkthroughSection[] = [
   },
   {
     id: 'interiors',
-    src: '/videos/06-interior.mp4?v=smooth3',
+    src: '/videos/06-interior.mp4?v=smooth4',
     label: '06 — Interiors',
     title: 'Interiors',
     description:
@@ -88,7 +88,7 @@ export const walkthroughSections: WalkthroughSection[] = [
   },
   {
     id: 'balcony-garage',
-    src: '/videos/07-balcony-garage.mp4?v=smooth3',
+    src: '/videos/07-balcony-garage.mp4?v=smooth4',
     label: '07 — Balcony & Garage',
     title: 'Balcony & Garage',
     headline: 'Where the journey opens outward',

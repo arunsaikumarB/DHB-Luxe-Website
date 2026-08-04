@@ -82,7 +82,10 @@ function OverlayContent({
             </div>
             <div className="grid grid-cols-2 gap-3">
               {section.features?.map((feature) => (
-                <div key={feature} className="glass-dark rounded-2xl px-5 py-4 text-background">
+                <div
+                  key={feature}
+                  className="rounded-2xl border border-background/15 bg-black/40 px-5 py-4 text-background"
+                >
                   <p className="text-sm md:text-base leading-snug">{feature}</p>
                 </div>
               ))}
@@ -103,7 +106,7 @@ function OverlayContent({
               {section.features?.map((feature) => (
                 <span
                   key={feature}
-                  className="glass-dark rounded-full px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-background/85"
+                  className="rounded-full border border-background/15 bg-black/40 px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-background/85"
                 >
                   {feature}
                 </span>
@@ -122,7 +125,7 @@ function OverlayContent({
               {section.features?.map((feature, i) => (
                 <div
                   key={feature}
-                  className="glass-dark flex h-full min-h-[140px] flex-col justify-between rounded-2xl p-5 text-background"
+                  className="flex h-full min-h-[140px] flex-col justify-between rounded-2xl border border-background/15 bg-black/40 p-5 text-background"
                 >
                   <p className="text-[10px] uppercase tracking-[0.25em] text-background/45">
                     {String(i + 1).padStart(2, '0')}
@@ -161,7 +164,7 @@ function OverlayContent({
 
         {section.variant === 'experience' && (
           <div className="max-w-2xl">
-            <div className="glass-dark rounded-3xl p-8 md:p-10 text-background">
+            <div className="rounded-3xl border border-background/15 bg-black/45 p-8 md:p-10 text-background">
               <p className="mb-4 text-[11px] uppercase tracking-[0.35em] text-accent">{section.label}</p>
               <h2 className="font-display text-[clamp(2.5rem,5vw,4.5rem)] leading-[1.02]">
                 {section.title}
@@ -274,11 +277,31 @@ async function unlockVideo(video: HTMLVideoElement) {
   })
 }
 
+const pendingSeek = new WeakMap<HTMLVideoElement, number>()
+
+function flushPendingSeek(video: HTMLVideoElement) {
+  const next = pendingSeek.get(video)
+  if (next == null) return
+  pendingSeek.delete(video)
+  seekVideo(video, next, 0.02)
+}
+
+function ensureSeekListener(video: HTMLVideoElement) {
+  if (video.dataset.seekHooked === '1') return
+  video.dataset.seekHooked = '1'
+  video.addEventListener('seeked', () => flushPendingSeek(video))
+}
+
 function seekVideo(video: HTMLVideoElement, time: number, minDelta = 0.04) {
   if (!Number.isFinite(video.duration) || video.duration <= 0) return
-  if (video.seeking || video.readyState < 2) return
+  if (video.readyState < 2) return
   const desired = Math.min(Math.max(time, 0.001), Math.max(video.duration - 0.05, 0.001))
   if (Math.abs(video.currentTime - desired) < minDelta) return
+  ensureSeekListener(video)
+  if (video.seeking) {
+    pendingSeek.set(video, desired)
+    return
+  }
   try {
     video.currentTime = desired
   } catch {
@@ -303,15 +326,14 @@ export function VideoScrollSequence({
   const counterRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<ScrollTrigger | null>(null)
 
-  /** Scroll-driven target on a continuous 0→N timeline */
-  const targetUnitRef = useRef(0)
-  /** Smoothed unit that lerps toward the target every frame */
-  const smoothUnitRef = useRef(0)
+  /** Continuous 0→N timeline driven directly by ScrollTrigger progress */
+  const unitRef = useRef(0)
   const activeIndexRef = useRef(0)
   const readyRef = useRef(false)
   const contentVisibleRef = useRef(false)
   const lastUiIndexRef = useRef(-1)
   const lastSeekMsRef = useRef(0)
+  const overlayWrapRef = useRef<HTMLDivElement | null>(null)
   const warmedRef = useRef<Set<number>>(new Set())
 
   const [ready, setReady] = useState(false)
@@ -330,18 +352,15 @@ export function VideoScrollSequence({
     })
   }
 
-  const syncUnit = (unit: number, immediate = false) => {
+  const syncUnit = (unit: number) => {
     const count = videos.length
-    const clamped = Math.min(Math.max(unit, 0), count - 0.0001)
-    targetUnitRef.current = clamped
-    if (immediate || Math.abs(clamped - smoothUnitRef.current) > 0.6) {
-      smoothUnitRef.current = clamped
-    }
+    unitRef.current = Math.min(Math.max(unit, 0), count - 0.0001)
   }
 
   const applyUnitToVideos = (unitRaw: number, force = false) => {
     const count = videos.length
     const unit = Math.min(Math.max(unitRaw, 0), count - 0.0001)
+    unitRef.current = unit
     const index = Math.min(Math.floor(unit), count - 1)
     const local = unit - index
     const video = videoRefs.current[index]
@@ -375,10 +394,11 @@ export function VideoScrollSequence({
       })
     }
 
+    // ~30fps seek cadence + queued seeks while decoder is busy
     const now = performance.now()
-    if (video && (force || now - lastSeekMsRef.current > 90)) {
+    if (video && (force || now - lastSeekMsRef.current > 32)) {
       lastSeekMsRef.current = now
-      seekVideo(video, safeTime(video.duration || 1, local), 0.12)
+      seekVideo(video, safeTime(video.duration || 1, local), 0.05)
     }
 
     applyOverlayFade(fadeRef.current, local)
@@ -392,7 +412,7 @@ export function VideoScrollSequence({
 
   const skipWalkthrough = () => {
     const count = videos.length
-    syncUnit(count - 0.0001, true)
+    syncUnit(count - 0.0001)
     applyUnitToVideos(count - 0.0001, true)
 
     const about = document.getElementById('about')
@@ -439,8 +459,7 @@ export function VideoScrollSequence({
       }
 
       // Always begin the cinematic sequence at frame 0 / scroll 0
-      targetUnitRef.current = 0
-      smoothUnitRef.current = 0
+      unitRef.current = 0
       activeIndexRef.current = 0
       lastUiIndexRef.current = 0
       contentVisibleRef.current = false
@@ -489,14 +508,13 @@ export function VideoScrollSequence({
     }
   }, [videos, preloadStrategy, onReady])
 
-  // Native ScrollTrigger drives scrub — no Lenis, no 60fps seek ticker
+  // ScrollTrigger scrub lag is the only smoother — no extra lerp lag
   useEffect(() => {
     if (!ready || !containerRef.current || !pinRef.current || reduced) return
 
     const count = videos.length
 
-    targetUnitRef.current = 0
-    smoothUnitRef.current = 0
+    unitRef.current = 0
     contentVisibleRef.current = false
     setContentVisible(false)
     setActiveIndex(0)
@@ -507,12 +525,6 @@ export function VideoScrollSequence({
 
     const applyProgress = (progress: number, forceSnap = false) => {
       const unit = progress * count
-      targetUnitRef.current = unit
-      if (forceSnap || Math.abs(unit - smoothUnitRef.current) > 0.35) {
-        smoothUnitRef.current = Math.min(Math.max(unit, 0), count - 0.0001)
-      } else {
-        smoothUnitRef.current += (unit - smoothUnitRef.current) * 0.35
-      }
 
       const show = progress > 0.012
       if (contentVisibleRef.current !== show) {
@@ -520,7 +532,7 @@ export function VideoScrollSequence({
         setContentVisible(show)
       }
 
-      applyUnitToVideos(smoothUnitRef.current, forceSnap)
+      applyUnitToVideos(unit, forceSnap)
     }
 
     const ctx = gsap.context(() => {
@@ -528,7 +540,8 @@ export function VideoScrollSequence({
         id: 'walkthrough-sequence',
         trigger: containerRef.current,
         pin: pinRef.current,
-        scrub: true,
+        // Single smoothing source (~0.65s catch-up) — feels glued to the wheel
+        scrub: 0.65,
         pinSpacing: true,
         start: 'top top',
         end: () => `+=${Math.round(count * window.innerHeight * (scrollVhPerSection / 100))}`,
@@ -552,8 +565,7 @@ export function VideoScrollSequence({
     const refreshId = window.setTimeout(() => {
       if (!hasDeepLinkHash()) {
         window.scrollTo(0, 0)
-        targetUnitRef.current = 0
-        smoothUnitRef.current = 0
+        unitRef.current = 0
       }
       ScrollTrigger.refresh()
     }, 100)
@@ -583,6 +595,18 @@ export function VideoScrollSequence({
 
   useEffect(() => {
     if (!ready || !contentVisible) return
+    const wrap = overlayWrapRef.current
+    if (wrap) {
+      wrap.style.transition = 'none'
+      wrap.style.opacity = '0'
+      wrap.style.transform = 'translate3d(0, 12px, 0)'
+      // Force reflow then ease in — cheaper than Framer AnimatePresence
+      void wrap.offsetHeight
+      wrap.style.transition =
+        'opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+      wrap.style.opacity = '1'
+      wrap.style.transform = 'translate3d(0, 0, 0)'
+    }
     const id = window.requestAnimationFrame(() => applyOverlayFade(fadeRef.current, 0.3))
     return () => window.cancelAnimationFrame(id)
   }, [activeIndex, ready, contentVisible])
@@ -631,23 +655,19 @@ export function VideoScrollSequence({
             <div className="pointer-events-none absolute inset-0 z-[4] bg-gradient-to-r from-black/25 via-transparent to-black/15" />
           </div>
 
-          <AnimatePresence mode="wait">
-            {contentVisible && videos[activeIndex] && (
-              <motion.div
-                key={videos[activeIndex].id}
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-                className="absolute inset-0 z-10"
-              >
-                <OverlayContent
-                  section={videos[activeIndex]}
-                  fadeRef={fadeRef}
-                />
-              </motion.div>
+          <div
+            ref={overlayWrapRef}
+            className="absolute inset-0 z-10 will-change-[opacity,transform]"
+            style={{
+              opacity: contentVisible ? 1 : 0,
+              pointerEvents: contentVisible ? 'auto' : 'none',
+              transform: 'translate3d(0, 0, 0)',
+            }}
+          >
+            {videos[activeIndex] && (
+              <OverlayContent section={videos[activeIndex]} fadeRef={fadeRef} />
             )}
-          </AnimatePresence>
+          </div>
 
           <div className="absolute bottom-0 left-0 right-0 z-20 h-[2px] bg-background/10">
             <div ref={progressBarRef} className="h-full w-0 bg-accent" />
